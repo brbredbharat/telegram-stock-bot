@@ -14,17 +14,24 @@ def fetch_moneycontrol_buzzing():
     articles = []
     seen = set()
 
-    for a in soup.select("li.clearfix a"):
-        title = a.get("title") or a.get_text(strip=True)
-        link = a.get("href")
+    # Updated selector to find proper news article links
+    for item in soup.select("ul > li.clearfix > a"):
+        title = item.get("title") or item.get_text(strip=True)
+        link = item.get("href")
+
         if not title or not link:
             continue
-        if "buzzing" in link and link not in seen:
-            seen.add(link)
-            full_link = link if link.startswith("http") else f"https://www.moneycontrol.com{link}"
-            articles.append((title.strip(), full_link))
-        if len(articles) >= 15:
+
+        if title in seen or "video" in link:
+            continue
+
+        full_link = link if link.startswith("http") else f"https://www.moneycontrol.com{link}"
+        articles.append((title.strip(), full_link))
+        seen.add(title)
+
+        if len(articles) >= 20:
             break
+
     return articles
 
 def get_top_news():
@@ -38,7 +45,7 @@ def get_top_news():
     for idx, (title, link) in enumerate(headlines, 1):
         score = analyze_sentiment(title)
         if score < 0.2:
-            continue  # Skip very neutral or negative headlines
+            continue  # Skip weak headlines
 
         symbol = guess_symbol_from_title(title)
         stock_info = get_stock_info(symbol) if symbol else None
@@ -48,9 +55,7 @@ def get_top_news():
             ltp = stock_info["ltp"]
             change = stock_info["changePercent"]
             arrow = "↑" if change >= 0 else "↓"
-            message += (
-                f"{idx}️⃣ {name} at ₹{ltp:.2f} ({arrow} {change:+.2f}%)\n"
-            )
+            message += f"{idx}️⃣ {name} at ₹{ltp:.2f} ({arrow} {change:+.2f}%)\n"
         else:
             message += f"{idx}️⃣ *{title}*\n"
 
