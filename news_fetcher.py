@@ -80,42 +80,16 @@ def get_top_3_stocks():
     except Exception as e:
         print("Moneycontrol error:", e)
 
-    positive_keywords = [
-        "order", "buy", "dividend", "approval", "contract",
-        "revenue", "acquire", "funding", "expansion", "partnership", "deal", "project", "license"
-    ]
-
-    bad_keywords = [
-        "sensex", "nifty", "bse", "market update", "index", "intraday",
-        "volume buzz", "pre-market", "closing bell", "mutual fund",
-        "commodity", "gold", "forex", "today's trading"
-    ]
-
-    scored = []
+    # Sort by sentiment, but DON’T filter
+    all_news = []
     for title, link, date in headlines:
-        title_lower = title.lower()
-
-        # Logging for debug
-        print(f"Title: {title}")
-        if any(bad in title_lower for bad in bad_keywords):
-            print("🔴 Skipped: vague keyword")
-            continue
-        if not any(good in title_lower for good in positive_keywords):
-            print("🔴 Skipped: no positive keyword")
-            continue
-
         score = analyze_sentiment(title)
-        if score < 0.05:
-            print("🔴 Skipped: low sentiment score")
-            continue
+        all_news.append((score, title, link))
 
-        print("🟢 Accepted:", title)
-        scored.append((score, title, link))
-
-    top6 = sorted(scored, reverse=True)[:6]
+    top6 = sorted(all_news, reverse=True)[:6]
 
     if not top6:
-        return "❗ No strong stock suggestions found from recent, high-quality news."
+        return "❗ Still no news found from Google, Groww, or Moneycontrol."
 
     message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
     for i, (score, title, link) in enumerate(top6, 1):
