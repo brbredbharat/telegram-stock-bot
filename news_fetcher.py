@@ -1,61 +1,81 @@
 import requests
-from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
-from stock_utils import guess_symbol_from_title, get_stock_info
-from datetime import datetime
+from datetime import datetime, timedelta
+import yfinance as yf
 
-DOMAINS = [
-    "moneycontrol.com", "livemint.com", "financialexpress.com", "zeebiz.com",
-    "cnbctv18.com", "thehindubusinessline.com", "economictimes.indiatimes.com",
-    "business-standard.com", "news18.com", "ndtv.com", "reuters.com", "bqprime.com"
+API_KEY = "pub_a6b9f0105fc5489ab10f6eb0f5c2314f"
+
+# Keywords that suggest positive stock news
+GOOD_KEYWORDS = [
+    "order", "buy", "dividend", "approval", "growth", "profit", "expansion",
+    "acquisition", "revenue", "contract", "record", "strong", "deal"
 ]
 
-def fetch_google_financial_news():
-    query = "+OR+".join([f"site:{d}" for d in DOMAINS])
-    url = f"https://news.google.com/search?q=stock+({query})&hl=en-IN&gl=IN&ceid=IN:en"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers, timeout=10)
-    res.raise_for_status()
-    soup = BeautifulSoup(res.text, "html.parser")
-    items = soup.select("article")
-    results = []
-    for art in items:
-        a = art.select_one("h3 a")
-        if not a:
-            continue
-        title = a.get_text(strip=True)
-        href = a["href"]
-        link = "https://news.google.com" + href[1:]
-        if any(d in link for d in DOMAINS):
-            results.append((title, link))
-        if len(results) >= 12:
-            break
-    return results
+def get_stock_info(stock_name):
+    try:
+        ticker = yf.Ticker(stock_name + ".NS")  # NSE tickers
+        data = ticker.history(period="1d")
+        if data.empty:
+            return "N/A", "N/A"
+        latest = data.iloc[-1]
+        price = round(latest["Close"], 2)
+        prev_close = round(latest["Open"], 2)
+        change_percent = round(((price - prev_close) / prev_close) * 100, 2)
+        return f"₹{price}", f"{change_percent:+.2f}%"
+    except Exception:
+        return "N/A", "N/A"
+
+def fetch_news_from_newsdata():
+    today = datetime.utcnow()
+    start_date = (today - timedelta(days=2)).strftime("%Y-%m-%d")
+    url = (
+        f"https://newsdata.io/api/1/news?apikey={API_KEY}"
+        f"&q=stock&language=en&country=in&from_date={start_date}"
+        f"&category=business"
+    )
+
+    response = requests.get(url)
+    if response.status_code != 200:
+        print("Error fetching from NewsData.io:", response.text)
+        return []
+
+    articles = []
+    data = response.json()
+    for article in data.get("results", []):
+        title = article["title"]
+        link = article["link"]
+        published = article["pubDate"]
+
+        if any(word in title.lower() for word in GOOD_KEYWORDS):
+            score = analyze_sentiment(title)
+            articles.append((score, title, link, published))
+    return sorted(articles, reverse=True)[:10]
+
+def extract_stock_name(title):
+    # Try to find likely stock name from title
+    words = title.split()
+    for word in words:
+        if word.isupper() and len(word) > 2:
+            return word
+    return words[0]  # fallback
 
 def get_top_news():
-    headlines = fetch_google_financial_news()
-    scored = []
-    for title, link in headlines:
-        score = analyze_sentiment(title)
-        sym = guess_symbol_from_title(title)
-        stock_info = get_stock_info(sym) if sym else None
-        scored.append((score, title, link, sym, stock_info))
+    try:
+        articles = fetch_news_from_newsdata()
+        if not articles:
+            return "❗ No strong stock suggestions found from recent NewsData.io headlines."
 
-    top10 = sorted(scored, key=lambda x: x[0], reverse=True)[:10]
-    message = f"📊 *Top Stock Suggestions ({datetime.now():%Y-%m-%d})*\n\n"
-
-    for idx, (score, title, link, sym, info) in enumerate(top10, 1):
-        if info:
-            name = info["name"]
-            price = info["ltp"]
-            change = info["changePercent"]
-            arrow = "↑" if change >= 0 else "↓"
-            line = f"{idx}️⃣ {name} at ₹{price:.2f} ({arrow} {change:+.2f}%)\n"
-        else:
-            line = f"{idx}️⃣ *{title}*\n"
-        message += (
-            line +
-            f"🔗 [Read more]({link})\n" +
-            f"📈 Sentiment Score: {score:.2f}\n\n"
-        )
-    return message
+        message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
+        for i, (score, title, link, published) in enumerate(articles, 1):
+            stock_name = extract_stock_name(title)
+            price, change = get_stock_info(stock_name)
+            message += (
+                f"{i}️⃣ *{stock_name}* — {title}\n"
+                f"💰 Price: {price} | Change: {change}\n"
+                f"🔗 [Read more]({link})\n"
+                f"📈 Sentiment Score: {score:.2f}\n\n"
+            )
+        return message
+    except Exception as e:
+        print("Error in get_top_news:", e)
+        return "❗ Something went wrong while fetching stock suggestions."
