@@ -3,10 +3,13 @@ from sentiment import analyze_sentiment
 from stock_utils import guess_symbol_from_title
 from datetime import datetime
 
-# Groww stock feed API
+# Fetch latest stock news from Groww's stock feed
 def fetch_news_from_stock_feed():
     url = "https://groww.in/v1/api/stories/listing/category/stock_feed?category_type=NEWS&count=20"
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+    }
     try:
         res = requests.get(url, headers=headers, timeout=10)
         res.raise_for_status()
@@ -14,6 +17,7 @@ def fetch_news_from_stock_feed():
     except Exception as e:
         print("Groww Stock Feed fetch error:", e)
         return []
+
     articles = []
     for item in data.get("data", []):
         title = item.get("story_title", "").strip()
@@ -23,7 +27,7 @@ def fetch_news_from_stock_feed():
             articles.append((title, link))
     return articles
 
-# Public LTP endpoint: https://api.groww.in/v1/live-data/ltp?segment=CASH&exchange_symbols=NSE_RELIANCE
+# Fetch live stock prices using Groww public API
 def get_prices_for_symbols(symbols):
     if not symbols:
         return {}
@@ -39,7 +43,8 @@ def get_prices_for_symbols(symbols):
         print("Groww LTP fetch error:", e)
         return {}
 
-def get_top_6_stocks():
+# Main function used by the bot
+def get_top_3_stocks():
     headlines = fetch_news_from_stock_feed()
     if not headlines:
         return "❗ No stock news articles found from Groww."
@@ -49,11 +54,11 @@ def get_top_6_stocks():
     for title, link in headlines:
         score = analyze_sentiment(title)
         sym = guess_symbol_from_title(title)
-        symbols.append(sym) if sym else None
+        if sym:
+            symbols.append(sym)
         scored.append((score, title, link, sym))
 
     top6 = sorted(scored, reverse=True)[:6]
-
     price_map = get_prices_for_symbols([s for (_, _, _, s) in top6 if s])
 
     message = f"📊 *Top Stock Suggestions ({datetime.now():%Y-%m-%d})*\n\n"
@@ -63,9 +68,8 @@ def get_top_6_stocks():
             key = f"NSE_{sym}"
             val = price_map.get(key)
             if val is not None:
-                price = val
-                # No direct %; fallback to sentiment only
-                price_info = f"💸 Price: ₹{price}\n"
+                price_info = f"💸 Price: ₹{val}\n"
+
         message += (
             f"{idx}️⃣ *{title}*\n"
             f"🔗 [Read more]({link})\n"
