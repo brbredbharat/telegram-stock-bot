@@ -5,6 +5,10 @@ from stock_utils import guess_symbol_from_title, get_stock_price
 from datetime import datetime, timedelta
 import dateparser
 
+def is_recent(pub_date):
+    today = datetime.today().date()
+    return pub_date.date() in {today, today - timedelta(days=1), today - timedelta(days=2)}
+
 def fetch_news_google():
     url = "https://news.google.com/search?q=Indian+stock+market&hl=en-IN&gl=IN&ceid=IN:en"
     res = requests.get(url)
@@ -24,8 +28,7 @@ def fetch_news_google():
         pub_date = dateparser.parse(date_str)
 
         if pub_date and is_recent(pub_date):
-            if "stock" in title.lower():
-                articles.append((title, full_link, pub_date.date()))
+            articles.append((title, full_link, pub_date.date()))
     return articles
 
 def fetch_news_groww():
@@ -37,10 +40,7 @@ def fetch_news_groww():
     for a in soup.select("a[data-content-id]"):
         title = a.text.strip()
         link = "https://groww.in" + a['href']
-        if "stock" not in title.lower():
-            continue
-
-        # Groww doesn’t give clear publish date, accept blindly but log for review
+        # Assume Groww is always recent
         articles.append((title, link, datetime.today().date()))
     return articles
 
@@ -59,17 +59,10 @@ def fetch_news_moneycontrol():
         title = a_tag.text.strip()
         link = a_tag['href']
         date_text = time_tag.text.strip() if time_tag else ""
-
         pub_date = dateparser.parse(date_text)
         if pub_date and is_recent(pub_date):
-            if "stock" in title.lower():
-                articles.append((title, link, pub_date.date()))
+            articles.append((title, link, pub_date.date()))
     return articles
-
-def is_recent(pub_date):
-    today = datetime.today().date()
-    allowed_dates = {today, today - timedelta(days=1), today - timedelta(days=2)}
-    return pub_date.date() in allowed_dates
 
 def get_top_3_stocks():
     headlines = []
@@ -87,25 +80,36 @@ def get_top_3_stocks():
     except Exception as e:
         print("Moneycontrol error:", e)
 
-    positive_keywords = ["order", "buy", "dividend", "approval", "contract", "revenue", "acquire", "funding", "expansion", "partnership"]
+    positive_keywords = [
+        "order", "buy", "dividend", "approval", "contract",
+        "revenue", "acquire", "funding", "expansion", "partnership", "deal", "project", "license"
+    ]
+
     bad_keywords = [
         "sensex", "nifty", "bse", "market update", "index", "intraday",
-        "volume buzz", "pre-market", "closing bell", "f&o", "mutual fund",
+        "volume buzz", "pre-market", "closing bell", "mutual fund",
         "commodity", "gold", "forex", "today's trading"
     ]
 
     scored = []
     for title, link, date in headlines:
         title_lower = title.lower()
+
+        # Logging for debug
+        print(f"Title: {title}")
         if any(bad in title_lower for bad in bad_keywords):
+            print("🔴 Skipped: vague keyword")
             continue
         if not any(good in title_lower for good in positive_keywords):
+            print("🔴 Skipped: no positive keyword")
             continue
 
         score = analyze_sentiment(title)
         if score < 0.05:
+            print("🔴 Skipped: low sentiment score")
             continue
 
+        print("🟢 Accepted:", title)
         scored.append((score, title, link))
 
     top6 = sorted(scored, reverse=True)[:6]
