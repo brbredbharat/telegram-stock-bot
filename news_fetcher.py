@@ -7,7 +7,7 @@ from datetime import datetime
 GOOD_KEYWORDS = [
     "buy", "order", "dividend", "surge", "rises", "jumps", "rallies", "acquire",
     "approval", "stake", "deal", "expansion", "profit", "beats", "soars",
-    "raises", "bags"
+    "raises", "bags", "growth", "upgraded", "recommend", "strong", "positive"
 ]
 
 def fetch_moneycontrol_buzzing():
@@ -38,7 +38,7 @@ def fetch_moneycontrol_buzzing():
 
     return articles
 
-def get_top_news():
+def get_top_10_news():
     headlines = fetch_moneycontrol_buzzing()
     if not headlines:
         return "❗ No news found on Moneycontrol buzzing stocks."
@@ -47,18 +47,14 @@ def get_top_news():
     for title, link in headlines:
         title_lower = title.lower()
         if not any(kw in title_lower for kw in GOOD_KEYWORDS):
-            continue  # skip vague/general news
+            continue
 
         score = analyze_sentiment(title)
-        if score < 0.2:
-            continue  # skip very neutral/negative news
-
         scored.append((score, title, link))
 
     if not scored:
         return "❗ No strong stock suggestions found from Moneycontrol today."
 
-    # Sort by sentiment score descending
     top_articles = sorted(scored, reverse=True)[:10]
 
     message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
@@ -74,7 +70,7 @@ def get_top_news():
             arrow = "↑" if change >= 0 else "↓"
             message += f"{idx}️⃣ **{name}** at ₹{ltp:.2f} ({arrow} {change:+.2f}%)\n"
         else:
-            message += f"{idx}️⃣ *{title}*\n"
+            message += f"{idx}️⃣ {title}\n"
 
         message += f"🔗 [Read more]({link})\n📈 Sentiment Score: {score:.2f}\n\n"
 
