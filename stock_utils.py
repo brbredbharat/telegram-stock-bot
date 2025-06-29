@@ -1,27 +1,30 @@
 import requests
-import re
+import csv
+import difflib
+from io import StringIO
 
-# Minimal symbol map (you can expand or load from NSE file)
-SYMBOL_MAP = {
-    "reliance": "RELIANCE",
-    "tcs": "TCS",
-    "infosys": "INFY",
-    "hdfc bank": "HDFCBANK",
-    "larsen": "LT",
-    "indusind": "INDUSINDBK",
-    "torrent": "TORNTPHARM",
-    "dixon": "DIXON",
-    "akzo": "AKZOINDIA",
-    "nykaa": "FSN",
-    "indigo": "INDIGO",
-    "varun beverages": "VBL",
-}
+symbol_map = {}
+
+def load_symbol_map():
+    global symbol_map
+    try:
+        url = "https://www1.nseindia.com/content/equities/EQUITY_L.csv"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
+        decoded = response.content.decode("utf-8")
+        reader = csv.DictReader(StringIO(decoded))
+        for row in reader:
+            name = row["Company Name"].lower()
+            symbol = row["Symbol"]
+            symbol_map[name] = symbol
+    except Exception as e:
+        print("Error loading symbol map:", e)
 
 def guess_symbol_from_title(title):
     title = title.lower()
-    for name, symbol in SYMBOL_MAP.items():
-        if name in title:
-            return symbol
+    best_match = difflib.get_close_matches(title, symbol_map.keys(), n=1, cutoff=0.5)
+    if best_match:
+        return symbol_map[best_match[0]]
     return None
 
 def get_stock_info(symbol):
@@ -40,11 +43,11 @@ def get_stock_info(symbol):
         ltp = float(data["priceInfo"]["lastPrice"])
         change = float(data["priceInfo"]["pChange"])
 
-        return {
-            "name": name,
-            "ltp": ltp,
-            "changePercent": change
-        }
+        arrow = "↑" if change >= 0 else "↓"
+        return f"**{name}** at ₹{ltp:.2f} ({arrow} {change:+.2f}%)"
     except Exception as e:
-        print(f"Stock info error for {symbol}: {e}")
+        print(f"Error fetching stock info for {symbol}: {e}")
         return None
+
+# Load map on module import
+load_symbol_map()
