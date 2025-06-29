@@ -1,43 +1,50 @@
-import yfinance as yf
+import requests
+import re
+
+# Minimal symbol map (you can expand or load from NSE file)
+SYMBOL_MAP = {
+    "reliance": "RELIANCE",
+    "tcs": "TCS",
+    "infosys": "INFY",
+    "hdfc bank": "HDFCBANK",
+    "larsen": "LT",
+    "indusind": "INDUSINDBK",
+    "torrent": "TORNTPHARM",
+    "dixon": "DIXON",
+    "akzo": "AKZOINDIA",
+    "nykaa": "FSN",
+    "indigo": "INDIGO",
+    "varun beverages": "VBL",
+}
 
 def guess_symbol_from_title(title):
-    # A simple matching based on common stock tickers; you can expand this
-    known_stocks = {
-        "Reliance": "RELIANCE.NS",
-        "TCS": "TCS.NS",
-        "Infosys": "INFY.NS",
-        "HDFC Bank": "HDFCBANK.NS",
-        "ICICI": "ICICIBANK.NS",
-        "Larsen": "LT.NS",
-        "HUL": "HINDUNILVR.NS",
-        "SBI": "SBIN.NS",
-        "Kotak": "KOTAKBANK.NS",
-        "Bharti": "BHARTIARTL.NS",
-        "Adani": "ADANIENT.NS",
-        "Wipro": "WIPRO.NS",
-        "Tata Steel": "TATASTEEL.NS",
-        "Tata Motors": "TATAMOTORS.NS"
-    }
-
-    for key, symbol in known_stocks.items():
-        if key.lower() in title.lower():
+    title = title.lower()
+    for name, symbol in SYMBOL_MAP.items():
+        if name in title:
             return symbol
     return None
 
 def get_stock_info(symbol):
     try:
-        stock = yf.Ticker(symbol)
-        data = stock.history(period="1d")
-        latest = data.iloc[-1]
-        previous = data.iloc[-2]
-        ltp = latest["Close"]
-        prev = previous["Close"]
-        change_percent = ((ltp - prev) / prev) * 100
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol}"
+        }
+        url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
+        session = requests.Session()
+        session.get("https://www.nseindia.com", headers=headers, timeout=5)
+        res = session.get(url, headers=headers, timeout=5)
+        data = res.json()
+
+        name = data["info"]["companyName"]
+        ltp = float(data["priceInfo"]["lastPrice"])
+        change = float(data["priceInfo"]["pChange"])
+
         return {
-            "name": symbol,
+            "name": name,
             "ltp": ltp,
-            "changePercent": change_percent
+            "changePercent": change
         }
     except Exception as e:
-        print(f"Error fetching stock info for {symbol}: {e}")
+        print(f"Stock info error for {symbol}: {e}")
         return None
