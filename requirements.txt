@@ -4,3 +4,4 @@ requests
 textblob
 pytz
 apscheduler
+nsetools
