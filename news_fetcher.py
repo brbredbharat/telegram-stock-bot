@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
+from stock_utils import guess_symbol_from_title, get_stock_price
 from datetime import datetime
 
 def fetch_news_google():
@@ -59,11 +60,22 @@ def get_top_3_stocks():
     except Exception as e:
         print("Moneycontrol error:", e)
 
+    # ❌ Filter out generic or vague titles
+    bad_keywords = [
+        "gainers", "losers", "top 10", "top stocks", "sensex", "nifty", "bse", "stock market",
+        "today’s trading", "intraday", "market update", "index", "volume buzz", "pre-market", "closing bell"
+    ]
+
     scored = []
     for title, link in headlines:
+        title_lower = title.lower()
+        if any(bad in title_lower for bad in bad_keywords):
+            continue  # Skip generic news
+
         score = analyze_sentiment(title)
         scored.append((score, title, link))
 
+    # Sort and pick top 3
     top3 = sorted(scored, reverse=True)[:3]
 
     if not top3:
@@ -71,6 +83,16 @@ def get_top_3_stocks():
 
     message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
     for i, (score, title, link) in enumerate(top3, 1):
-        message += f"{i}️⃣ {title}\n🔗 [Read more]({link})\n📈 Sentiment Score: {score:.2f}\n\n"
+        symbol = guess_symbol_from_title(title)
+        if symbol:
+            price, change = get_stock_price(symbol)
+            if price and change:
+                price_info = f"💸 Price: ₹{price} ({change}%)\n"
+            else:
+                price_info = ""
+        else:
+            price_info = ""
+
+        message += f"{i}️⃣ {title}\n🔗 [Read more]({link})\n{price_info}📈 Sentiment Score: {score:.2f}\n\n"
 
     return message
