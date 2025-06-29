@@ -2,12 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
 from stock_utils import guess_symbol_from_title, get_stock_price
-from datetime import datetime, timedelta
+from datetime import datetime
 import dateparser
-
-def is_recent(pub_date):
-    today = datetime.today().date()
-    return pub_date.date() in {today, today - timedelta(days=1), today - timedelta(days=2)}
 
 def fetch_news_google():
     url = "https://news.google.com/search?q=Indian+stock+market&hl=en-IN&gl=IN&ceid=IN:en"
@@ -17,18 +13,12 @@ def fetch_news_google():
 
     for item in soup.select("article"):
         a_tag = item.select_one("h3 a")
-        time_tag = item.select_one("time")
-        if not a_tag or not time_tag:
+        if not a_tag:
             continue
-
         title = a_tag.text.strip()
         link = a_tag['href']
         full_link = "https://news.google.com" + link[1:] if link.startswith('.') else link
-        date_str = time_tag.get("datetime", "")
-        pub_date = dateparser.parse(date_str)
-
-        if pub_date and is_recent(pub_date):
-            articles.append((title, full_link, pub_date.date()))
+        articles.append((title, full_link))
     return articles
 
 def fetch_news_groww():
@@ -40,8 +30,7 @@ def fetch_news_groww():
     for a in soup.select("a[data-content-id]"):
         title = a.text.strip()
         link = "https://groww.in" + a['href']
-        # Assume Groww is always recent
-        articles.append((title, link, datetime.today().date()))
+        articles.append((title, link))
     return articles
 
 def fetch_news_moneycontrol():
@@ -52,16 +41,11 @@ def fetch_news_moneycontrol():
 
     for item in soup.select("li.clearfix"):
         a_tag = item.select_one("a")
-        time_tag = item.select_one("span > span")
         if not a_tag:
             continue
-
         title = a_tag.text.strip()
         link = a_tag['href']
-        date_text = time_tag.text.strip() if time_tag else ""
-        pub_date = dateparser.parse(date_text)
-        if pub_date and is_recent(pub_date):
-            articles.append((title, link, pub_date.date()))
+        articles.append((title, link))
     return articles
 
 def get_top_3_stocks():
@@ -80,16 +64,15 @@ def get_top_3_stocks():
     except Exception as e:
         print("Moneycontrol error:", e)
 
-    # Sort by sentiment, but DON’T filter
+    if not headlines:
+        return "❗ Still no news found from Google, Groww, or Moneycontrol."
+
     all_news = []
-    for title, link, date in headlines:
+    for title, link in headlines:
         score = analyze_sentiment(title)
         all_news.append((score, title, link))
 
     top6 = sorted(all_news, reverse=True)[:6]
-
-    if not top6:
-        return "❗ Still no news found from Google, Groww, or Moneycontrol."
 
     message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
     for i, (score, title, link) in enumerate(top6, 1):
