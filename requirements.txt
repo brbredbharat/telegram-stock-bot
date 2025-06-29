@@ -5,3 +5,4 @@ textblob
 pytz
 apscheduler
 nsetools
+dateparser
