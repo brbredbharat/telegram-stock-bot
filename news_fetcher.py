@@ -1,61 +1,75 @@
 import requests
 from sentiment import analyze_sentiment
-from stock_utils import guess_symbol_from_title, get_stock_price
+from stock_utils import guess_symbol_from_title
 from datetime import datetime
 
+# Groww stock feed API
 def fetch_news_from_stock_feed():
     url = "https://groww.in/v1/api/stories/listing/category/stock_feed?category_type=NEWS&count=20"
-    res = requests.get(url)
-    data = res.json()
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+    except Exception as e:
+        print("Groww Stock Feed fetch error:", e)
+        return []
     articles = []
-
     for item in data.get("data", []):
         title = item.get("story_title", "").strip()
         slug = item.get("slug", "")
         if title and slug:
-            full_link = f"https://groww.in/stories/{slug}"
-            articles.append((title, full_link))
+            link = f"https://groww.in/stories/{slug}"
+            articles.append((title, link))
     return articles
 
-def get_top_3_stocks():
+# Public LTP endpoint: https://api.groww.in/v1/live-data/ltp?segment=CASH&exchange_symbols=NSE_RELIANCE
+def get_prices_for_symbols(symbols):
+    if not symbols:
+        return {}
+    unique = list(set(symbols))
+    param = ",".join(f"NSE_{s}" for s in unique)
+    url = f"https://api.groww.in/v1/live-data/ltp?segment=CASH&exchange_symbols={param}"
+    headers = {"Accept": "application/json"}
     try:
-        headlines = fetch_news_from_stock_feed()
+        res = requests.get(url, headers=headers, timeout=5)
+        res.raise_for_status()
+        return res.json().get("payload") or {}
     except Exception as e:
-        print("Groww Stock Feed error:", e)
-        return "❗ Error while fetching news from Groww."
+        print("Groww LTP fetch error:", e)
+        return {}
 
+def get_top_6_stocks():
+    headlines = fetch_news_from_stock_feed()
     if not headlines:
-        return "❗ No stock news articles found from Groww feed."
+        return "❗ No stock news articles found from Groww."
 
-    # Analyze and sort by sentiment
-    scored_news = []
+    scored = []
+    symbols = []
     for title, link in headlines:
         score = analyze_sentiment(title)
-        scored_news.append((score, title, link))
+        sym = guess_symbol_from_title(title)
+        symbols.append(sym) if sym else None
+        scored.append((score, title, link, sym))
 
-    # Top 6 by sentiment
-    top6 = sorted(scored_news, reverse=True)[:6]
+    top6 = sorted(scored, reverse=True)[:6]
 
-    # Build Telegram-formatted message
-    message = f"📊 *Top Stock Suggestions ({datetime.now().strftime('%Y-%m-%d')})*\n\n"
+    price_map = get_prices_for_symbols([s for (_, _, _, s) in top6 if s])
 
-    for i, (score, title, link) in enumerate(top6, 1):
-        number = f"{i}️⃣"
-        symbol = guess_symbol_from_title(title)
-        if symbol:
-            price, change = get_stock_price(symbol)
-            if price and change:
-                price_info = f"💸 Price: ₹{price} ({change}%)\n"
-            else:
-                price_info = ""
-        else:
-            price_info = ""
-
+    message = f"📊 *Top Stock Suggestions ({datetime.now():%Y-%m-%d})*\n\n"
+    for idx, (score, title, link, sym) in enumerate(top6, 1):
+        price_info = ""
+        if sym:
+            key = f"NSE_{sym}"
+            val = price_map.get(key)
+            if val is not None:
+                price = val
+                # No direct %; fallback to sentiment only
+                price_info = f"💸 Price: ₹{price}\n"
         message += (
-            f"{number} *{title}*\n"
+            f"{idx}️⃣ *{title}*\n"
             f"🔗 [Read more]({link})\n"
             f"{price_info}"
             f"📈 Sentiment Score: {score:.2f}\n\n"
         )
-
     return message
