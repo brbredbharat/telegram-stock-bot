@@ -1,87 +1,61 @@
 import requests
 from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
-from stock_utils import guess_symbol_from_title
+from stock_utils import guess_symbol_from_title, get_stock_info
 from datetime import datetime
 
-# List of trusted financial domains
-ALLOWED_SOURCES = [
-    "moneycontrol.com", "zeebiz.com", "livemint.com", "financialexpress.com",
+DOMAINS = [
+    "moneycontrol.com", "livemint.com", "financialexpress.com", "zeebiz.com",
     "cnbctv18.com", "thehindubusinessline.com", "economictimes.indiatimes.com",
     "business-standard.com", "news18.com", "ndtv.com", "reuters.com", "bqprime.com"
 ]
 
-# Positive signal keywords for filtering good stock news
-GOOD_KEYWORDS = [
-    "order", "buy", "acquire", "approval", "dividend", "deal", "record date",
-    "invest", "investment", "partner", "partnership", "raises stake", "expansion",
-    "license", "contract", "bags order", "growth", "increase", "launch", "revenue up"
-]
-
 def fetch_google_financial_news():
-    url = "https://news.google.com/search?q=stock+site:moneycontrol.com+OR+site:zeebiz.com+OR+site:livemint.com+OR+site:financialexpress.com+OR+site:cnbctv18.com+OR+site:thehindubusinessline.com+OR+site:economictimes.indiatimes.com+OR+site:business-standard.com+OR+site:news18.com+OR+site:ndtv.com&hl=en-IN&gl=IN&ceid=IN:en"
+    query = "+OR+".join([f"site:{d}" for d in DOMAINS])
+    url = f"https://news.google.com/search?q=stock+({query})&hl=en-IN&gl=IN&ceid=IN:en"
     headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(res.text, 'html.parser')
-    except Exception as e:
-        print("Google News fetch error:", e)
-        return []
-
-    articles = []
-    for a in soup.select("article h3 a"):
+    res = requests.get(url, headers=headers, timeout=10)
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, "html.parser")
+    items = soup.select("article")
+    results = []
+    for art in items:
+        a = art.select_one("h3 a")
+        if not a:
+            continue
         title = a.get_text(strip=True)
-        link = a.get("href")
-        full_link = "https://news.google.com" + link[1:] if link.startswith(".") else link
-        if any(domain in full_link for domain in ALLOWED_SOURCES):
-            if any(keyword in title.lower() for keyword in GOOD_KEYWORDS):
-                articles.append((title, full_link))
-    return articles
+        href = a["href"]
+        link = "https://news.google.com" + href[1:]
+        if any(d in link for d in DOMAINS):
+            results.append((title, link))
+        if len(results) >= 12:
+            break
+    return results
 
-def get_prices_for_symbols(symbols):
-    if not symbols:
-        return {}
-    unique = list(set(symbols))
-    param = ",".join(f"NSE_{s}" for s in unique)
-    url = f"https://api.groww.in/v1/live-data/ltp?segment=CASH&exchange_symbols={param}"
-    headers = {"Accept": "application/json"}
-    try:
-        res = requests.get(url, headers=headers, timeout=5)
-        res.raise_for_status()
-        return res.json().get("payload") or {}
-    except Exception as e:
-        print("Price fetch error:", e)
-        return {}
-
-def get_top_3_stocks():
+def get_top_news():
     headlines = fetch_google_financial_news()
-    if not headlines:
-        return "❗ No strong stock suggestions found from recent, high-quality news."
-
     scored = []
-    symbols = []
     for title, link in headlines:
         score = analyze_sentiment(title)
         sym = guess_symbol_from_title(title)
-        if sym:
-            symbols.append(sym)
-        scored.append((score, title, link, sym))
+        stock_info = get_stock_info(sym) if sym else None
+        scored.append((score, title, link, sym, stock_info))
 
-    top6 = sorted(scored, reverse=True)[:6]
-    price_map = get_prices_for_symbols([s for (_, _, _, s) in top6 if s])
-
+    top10 = sorted(scored, key=lambda x: x[0], reverse=True)[:10]
     message = f"📊 *Top Stock Suggestions ({datetime.now():%Y-%m-%d})*\n\n"
-    for idx, (score, title, link, sym) in enumerate(top6, 1):
-        price_info = ""
-        if sym:
-            key = f"NSE_{sym}"
-            val = price_map.get(key)
-            if val is not None:
-                price_info = f"💸 Price: ₹{val}\n"
+
+    for idx, (score, title, link, sym, info) in enumerate(top10, 1):
+        if info:
+            name = info["name"]
+            price = info["ltp"]
+            change = info["changePercent"]
+            arrow = "↑" if change >= 0 else "↓"
+            line = f"{idx}️⃣ {name} at ₹{price:.2f} ({arrow} {change:+.2f}%)\n"
+        else:
+            line = f"{idx}️⃣ *{title}*\n"
         message += (
-            f"{idx}️⃣ *{title}*\n"
-            f"🔗 [Read more]({link})\n"
-            f"{price_info}"
+            line +
+            f"🔗 [Read more]({link})\n" +
             f"📈 Sentiment Score: {score:.2f}\n\n"
         )
     return message
