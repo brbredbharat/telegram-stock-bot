@@ -6,3 +6,4 @@ pytz
 apscheduler
 nsetools
 dateparser
+yfinance
