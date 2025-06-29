@@ -1,33 +1,31 @@
 import requests
+from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
 from stock_utils import guess_symbol_from_title
 from datetime import datetime
 
-# Fetch latest stock news from Groww's stock feed
-def fetch_news_from_stock_feed():
-    url = "https://groww.in/v1/api/stories/listing/category/stock_feed?category_type=NEWS&count=20"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
+def fetch_groww_stock_news():
+    url = "https://groww.in/market-news/stocks"
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
         res = requests.get(url, headers=headers, timeout=10)
         res.raise_for_status()
-        data = res.json()
+        soup = BeautifulSoup(res.text, "html.parser")
     except Exception as e:
-        print("Groww Stock Feed fetch error:", e)
+        print("Error while fetching Groww stock news:", e)
         return []
 
     articles = []
-    for item in data.get("data", []):
-        title = item.get("story_title", "").strip()
-        slug = item.get("slug", "")
-        if title and slug:
-            link = f"https://groww.in/stories/{slug}"
-            articles.append((title, link))
+    seen = set()
+    for a in soup.select("a[href^='/market-news/stocks/']"):
+        title = a.get_text(strip=True)
+        link = a.get("href")
+        if title and link and title not in seen:
+            seen.add(title)
+            full_link = f"https://groww.in{link}"
+            articles.append((title, full_link))
     return articles
 
-# Fetch live stock prices using Groww public API
 def get_prices_for_symbols(symbols):
     if not symbols:
         return {}
@@ -40,12 +38,11 @@ def get_prices_for_symbols(symbols):
         res.raise_for_status()
         return res.json().get("payload") or {}
     except Exception as e:
-        print("Groww LTP fetch error:", e)
+        print("Price fetch error:", e)
         return {}
 
-# Main function used by the bot
 def get_top_3_stocks():
-    headlines = fetch_news_from_stock_feed()
+    headlines = fetch_groww_stock_news()
     if not headlines:
         return "❗ No stock news articles found from Groww."
 
