@@ -1,7 +1,6 @@
 from nsetools import Nse
 nse = Nse()
 
-# Mapping keywords in news headlines to NSE stock symbols
 STOCK_SYMBOLS = {
     "reliance": "RELIANCE",
     "jio financial": "JIOFIN",
@@ -46,8 +45,8 @@ def guess_symbol_from_title(title):
 def get_stock_price(symbol):
     try:
         quote = nse.get_quote(symbol.lower())
-        price = quote['lastPrice']
-        change = quote['pChange']
+        price = quote.get('lastPrice')
+        change = quote.get('pChange')
         return price, change
     except Exception as e:
         print(f"Error fetching price for {symbol}:", e)
