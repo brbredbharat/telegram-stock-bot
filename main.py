@@ -1,36 +1,41 @@
-import os
+from telegram.ext import Updater, CommandHandler
 import logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import os
 
-# Read your bot token from environment variable
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# Logging
+# Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-# Command: /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Welcome! Use /stock to get today's stock tip.")
+# Replace this with your real logic
+def start(update, context):
+    update.message.reply_text("Hello! I'm your stock suggestion bot. Use /stockupdate to get today's recommendation.")
 
-# Command: /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📘 Available commands:\n/start\n/help\n/stock")
+def help_command(update, context):
+    update.message.reply_text("Use /stockupdate to get the stock suggestion for today.")
 
-# Command: /stock
-async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📈 Today's stock tip: *HDFC Bank* – Strong Buy", parse_mode="Markdown")
+def stockupdate(update, context):
+    update.message.reply_text("📈 Suggested stock for today: RELIANCE\nReason: Positive news sentiment and strong volume.")
 
-# Main function
+def main():
+    TOKEN = os.environ.get("TOKEN")
+    if not TOKEN:
+        logger.error("TOKEN environment variable not set.")
+        return
+
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    # Command handlers
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CommandHandler("stockupdate", stockupdate))
+
+    # Start the bot
+    updater.start_polling()
+    updater.idle()
+
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("stock", stock))
-
-    print("🤖 Bot is running...")
-    app.run_polling()
+    main()
