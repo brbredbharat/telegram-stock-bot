@@ -60,26 +60,28 @@ def get_top_3_stocks():
     except Exception as e:
         print("Moneycontrol error:", e)
 
-    # ❌ Filter out generic or vague titles
     bad_keywords = [
         "gainers", "losers", "top 10", "top stocks", "sensex", "nifty", "bse", "stock market",
-        "today’s trading", "intraday", "market update", "index", "volume buzz", "pre-market", "closing bell"
+        "today’s trading", "intraday", "market update", "index", "volume buzz", "pre-market",
+        "closing bell", "f&o", "mutual fund", "commodity", "gold", "forex"
     ]
 
     scored = []
     for title, link in headlines:
         title_lower = title.lower()
         if any(bad in title_lower for bad in bad_keywords):
-            continue  # Skip generic news
+            continue
 
         score = analyze_sentiment(title)
+        if score <= 0.0:
+            continue
+
         scored.append((score, title, link))
 
-    # Sort and pick top 3
     top3 = sorted(scored, reverse=True)[:3]
 
     if not top3:
-        return "❗ No valid stock news found for today or yesterday."
+        return "❗ No strong stock suggestions found today. All headlines were too neutral or vague."
 
     message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
     for i, (score, title, link) in enumerate(top3, 1):
