@@ -1,39 +1,28 @@
 from telegram.ext import Updater, CommandHandler
-import logging
 import os
 
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# Replace this with your real logic
 def start(update, context):
-    update.message.reply_text("Hello! I'm your stock suggestion bot. Use /stockupdate to get today's recommendation.")
+    update.message.reply_text("Hi! Welcome to the stock suggestion bot.\nUse /stockupdate to get today’s suggestion.")
 
 def help_command(update, context):
-    update.message.reply_text("Use /stockupdate to get the stock suggestion for today.")
+    update.message.reply_text("Available commands:\n/start\n/help\n/stockupdate")
 
 def stockupdate(update, context):
-    update.message.reply_text("📈 Suggested stock for today: RELIANCE\nReason: Positive news sentiment and strong volume.")
+    update.message.reply_text("📈 Today's stock suggestion: RELIANCE\n(Sentiment: Positive)")
 
 def main():
     TOKEN = os.environ.get("TOKEN")
     if not TOKEN:
-        logger.error("TOKEN environment variable not set.")
+        print("Error: TOKEN not set in environment variables.")
         return
 
-    updater = Updater(TOKEN, use_context=True)
+    updater = Updater(token=TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Command handlers
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help_command))
     dp.add_handler(CommandHandler("stockupdate", stockupdate))
 
-    # Start the bot
     updater.start_polling()
     updater.idle()
 
