@@ -1,5 +1,5 @@
 from telegram.ext import Updater, CommandHandler
-from news_fetcher import get_top_news
+from news_fetcher import get_top_10_news
 from scheduler import schedule_daily_job
 import os
 
@@ -10,7 +10,7 @@ def help_command(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="/start\n/help\n/getstocks")
 
 def getstocks(update, context):
-    message = get_top_news()
+    message = get_top_10_news()
     context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode="Markdown")
 
 def main():
