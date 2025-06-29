@@ -4,6 +4,12 @@ from sentiment import analyze_sentiment
 from stock_utils import guess_symbol_from_title, get_stock_info
 from datetime import datetime
 
+GOOD_KEYWORDS = [
+    "buy", "order", "dividend", "surge", "rises", "jumps", "rallies", "acquire",
+    "approval", "stake", "deal", "expansion", "profit", "beats", "soars",
+    "raises", "bags"
+]
+
 def fetch_moneycontrol_buzzing():
     url = "https://www.moneycontrol.com/news/tags/buzzing-stocks.html"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -14,14 +20,12 @@ def fetch_moneycontrol_buzzing():
     articles = []
     seen = set()
 
-    # Updated selector to find proper news article links
-    for item in soup.select("ul > li.clearfix > a"):
-        title = item.get("title") or item.get_text(strip=True)
-        link = item.get("href")
+    for a in soup.select("ul > li.clearfix > a"):
+        title = a.get("title") or a.get_text(strip=True)
+        link = a.get("href")
 
         if not title or not link:
             continue
-
         if title in seen or "video" in link:
             continue
 
@@ -29,7 +33,7 @@ def fetch_moneycontrol_buzzing():
         articles.append((title.strip(), full_link))
         seen.add(title)
 
-        if len(articles) >= 20:
+        if len(articles) >= 30:
             break
 
     return articles
@@ -39,14 +43,27 @@ def get_top_news():
     if not headlines:
         return "❗ No news found on Moneycontrol buzzing stocks."
 
-    message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
-    count = 0
+    scored = []
+    for title, link in headlines:
+        title_lower = title.lower()
+        if not any(kw in title_lower for kw in GOOD_KEYWORDS):
+            continue  # skip vague/general news
 
-    for idx, (title, link) in enumerate(headlines, 1):
         score = analyze_sentiment(title)
         if score < 0.2:
-            continue  # Skip weak headlines
+            continue  # skip very neutral/negative news
 
+        scored.append((score, title, link))
+
+    if not scored:
+        return "❗ No strong stock suggestions found from Moneycontrol today."
+
+    # Sort by sentiment score descending
+    top_articles = sorted(scored, reverse=True)[:10]
+
+    message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
+
+    for idx, (score, title, link) in enumerate(top_articles, 1):
         symbol = guess_symbol_from_title(title)
         stock_info = get_stock_info(symbol) if symbol else None
 
@@ -55,16 +72,10 @@ def get_top_news():
             ltp = stock_info["ltp"]
             change = stock_info["changePercent"]
             arrow = "↑" if change >= 0 else "↓"
-            message += f"{idx}️⃣ {name} at ₹{ltp:.2f} ({arrow} {change:+.2f}%)\n"
+            message += f"{idx}️⃣ **{name}** at ₹{ltp:.2f} ({arrow} {change:+.2f}%)\n"
         else:
             message += f"{idx}️⃣ *{title}*\n"
 
         message += f"🔗 [Read more]({link})\n📈 Sentiment Score: {score:.2f}\n\n"
-        count += 1
-        if count >= 10:
-            break
-
-    if count == 0:
-        return "❗ No strong stock suggestions found from Moneycontrol today."
 
     return message
