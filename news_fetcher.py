@@ -1,43 +1,46 @@
 import requests
-from bs4 import BeautifulSoup
 from sentiment import analyze_sentiment
 from stock_utils import guess_symbol_from_title, get_stock_price
 from datetime import datetime
 
-def fetch_news_groww():
-    url = "https://groww.in/market-news/stocks"
+def fetch_news_from_stock_feed():
+    url = "https://groww.in/v1/api/stories/listing/category/stock_feed?category_type=NEWS&count=20"
     res = requests.get(url)
-    soup = BeautifulSoup(res.text, 'html.parser')
+    data = res.json()
     articles = []
 
-    for a in soup.select("a[href^='/market-news/stocks/']"):
-        title = a.text.strip()
-        href = a['href']
-        full_link = "https://groww.in" + href
-        if title and full_link:
+    for item in data.get("data", []):
+        title = item.get("story_title", "").strip()
+        slug = item.get("slug", "")
+        if title and slug:
+            full_link = f"https://groww.in/stories/{slug}"
             articles.append((title, full_link))
     return articles
 
 def get_top_3_stocks():
-    headlines = []
-
     try:
-        headlines += fetch_news_groww()
+        headlines = fetch_news_from_stock_feed()
     except Exception as e:
-        print("Groww error:", e)
+        print("Groww Stock Feed error:", e)
+        return "❗ Error while fetching news from Groww."
 
     if not headlines:
-        return "❗ No Groww stock news articles found."
+        return "❗ No stock news articles found from Groww feed."
 
-    all_news = []
+    # Analyze and sort by sentiment
+    scored_news = []
     for title, link in headlines:
         score = analyze_sentiment(title)
-        all_news.append((score, title, link))
+        scored_news.append((score, title, link))
 
-    top6 = sorted(all_news, reverse=True)[:6]
+    # Top 6 by sentiment
+    top6 = sorted(scored_news, reverse=True)[:6]
 
-    message = f"📊 *Top Stock Suggestions ({datetime.now().date()})*\n\n"
+    # Build Telegram-formatted message
+    message = f"📊 *Top Stock Suggestions ({datetime.now().strftime('%Y-%m-%d')})*\n\n"
+
     for i, (score, title, link) in enumerate(top6, 1):
+        number = f"{i}️⃣"
         symbol = guess_symbol_from_title(title)
         if symbol:
             price, change = get_stock_price(symbol)
@@ -49,7 +52,7 @@ def get_top_3_stocks():
             price_info = ""
 
         message += (
-            f"{i}️⃣ *{title}*\n"
+            f"{number} *{title}*\n"
             f"🔗 [Read more]({link})\n"
             f"{price_info}"
             f"📈 Sentiment Score: {score:.2f}\n\n"
